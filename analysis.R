@@ -1,9 +1,9 @@
 library(readr)
-library(tidyverse) # general
-library(ggalt) # dumbbell plots
-library(countrycode) # continent
-library(rworldmap) # quick country-level heat maps
-library(gridExtra) # plots
+library(tidyverse) 
+library(ggalt) 
+library(countrycode) 
+library(rworldmap) 
+library(gridExtra)
 library(broom) 
 library(plotly)
 library(dplyr)
@@ -254,9 +254,6 @@ country_plot <- ggplot(country, aes(x = country, y = suicide_per_100k, fill = co
   theme(legend.position = "bottom")
 
 country_plot 
-#country_plot %>% ggplotly 
-
-
 
 ## Highest and lowest suicide rates
 countries <- data %>% 
@@ -341,15 +338,6 @@ country_year %>%
        x = "Year", 
        y = "Suicides per 100k")
 
-#GDP 
-p <- ggplot(data, aes(x = country, y = gdp_per_capita, fill = country)) + 
-  geom_bar(stat = "identity") + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
-  theme(axis.text=element_text(size=6)) + 
-  theme(legend.position='none') + 
-  transition_time(year) + labs(title = "Year: {frame_time}")
-
-animate(p, renderer = gifski_renderer())
 
 #GDP and suicide
 country_mean_gdp <- data %>%
