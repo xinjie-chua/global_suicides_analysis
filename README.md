@@ -1,1 +1,1 @@
-# global_suicides_analysis
+# Global Suicides Analysis
