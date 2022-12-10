@@ -1,9 +1,9 @@
 library(readr)
 library(tidyverse) 
-library(ggalt) 
+library(ggalt)
 library(countrycode) 
 library(rworldmap) 
-library(gridExtra)
+library(gridExtra) 
 library(broom) 
 library(plotly)
 library(dplyr)
@@ -80,12 +80,12 @@ country <- data %>%
   summarize(suicide_per_100k = sum(suicides_no) / sum(population) * 100000) 
   
   countrydata <- joinCountryData2Map(country, joinCode = "NAME", nameJoinColumn = "country")
-  par(mar=c(0, 0, 2, 0)) # margins
+  par(mar=c(0, 0, 0, 0)) # margins
 
 mapCountryData(countrydata, 
                nameColumnToPlot="suicide_per_100k", 
                mapTitle="Suicide Throughtout The World",
-               colourPalette = "heat", 
+               colourPalette =c('white','pink','red','darkred'), 
                oceanCol="lightblue", 
                missingCountryCol="grey65", 
                catMethod = "pretty")
@@ -110,6 +110,7 @@ continent_plot <- ggplot(continent, aes(x = continent, y = suicide_per_100k, fil
 
 continent_time <- data %>%
   group_by(year, continent) %>%
+  filter(year != 2016) %>%
   summarize(suicide_per_100k = (sum(suicides_no) / sum(population) * 100000))
 
 continent_time$continent <- factor(continent_time$continent, ordered = T, levels = continent$continent)
@@ -123,7 +124,7 @@ continent_time_plot <- ggplot(continent_time, aes(x = year, y = suicide_per_100k
        y = "Suicides per 100k", 
        color = "Continent") + 
   theme(legend.position = "none", title = element_text(size = 10)) + 
-  scale_x_continuous(breaks = seq(1985, 2016, 5), minor_breaks = F)
+  scale_x_continuous(breaks = seq(1985, 2015, 5), minor_breaks = F)
 
 grid.arrange(continent_plot, continent_time_plot, ncol = 2)
 
@@ -232,11 +233,11 @@ data %>%
 
 ## By Country
 
-country <- data %>%
+country <- (head(data %>%
   group_by(country, continent) %>%
   summarize(n = n(), 
-            suicide_per_100k = (sum(suicides_no) / sum(population) * 100000)) %>%
-  arrange(desc(suicide_per_100k))
+            suicide_per_100k = (sum(suicides_no) / sum(population) * 100000))%>%
+  arrange(desc(suicide_per_100k)),30))
 
 country$country <- factor(country$country, 
                           ordered = T, 
@@ -254,6 +255,7 @@ country_plot <- ggplot(country, aes(x = country, y = suicide_per_100k, fill = co
   theme(legend.position = "bottom")
 
 country_plot 
+
 
 ## Highest and lowest suicide rates
 countries <- data %>% 
@@ -354,4 +356,21 @@ ggplot(country_mean_gdp, aes(x = gdp_per_capita, y = suicide_per_100k, col = con
        y = "Suicides per 100k", 
        col = "Continent") 
 
+# Countries with high correlations of GDP and suicide
+
+options(repr.plot.width = 10,rer.plot.height = 30)
+country_cor_plot <- data %>%
+  group_by(country, year) %>%
+  summarise(gdp_per_capita = mean(gdp_per_capita), suicide_per_100k = mean(suicide_per_100k)) %>%
+  group_by(country) %>%
+  summarise(correlation = cor(gdp_per_capita, suicide_per_100k,method = 'spearman')) %>% 
+  arrange(desc(correlation)) %>% 
+  filter(correlation>0.5 | correlation < -0.5) %>% 
+  ggplot(aes(x = country,y = correlation,col=correlation))+
+  geom_segment(aes(x = country, y=0,xend = country, yend = correlation))+
+  geom_point(stat='identity')+
+  scale_color_gradient(low='#d8345f',high='#4cbbb9')+
+  ylim(c(-1,1)) + coord_flip()
+
+country_cor_plot
 
