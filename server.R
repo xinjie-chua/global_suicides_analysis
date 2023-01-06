@@ -11,6 +11,7 @@ library(tidyr)
 library(ggplot2)
 library(stringr)
 library(leaflet)
+library(highcharter)
 
 load_pckg <- function(){
   if(!require('pacman'))install.packages('pacman')
@@ -21,7 +22,9 @@ load_pckg()
 source('main.R')
 
 shinyServer(function(input, output){
-  ########## Home
+  
+  ########## Home #####################################
+  
   output$introduction_title <- renderText({
     intro <- paste0("An Introduction to Our Findings, Our Purpose, and Our Goal")
   })
@@ -46,30 +49,27 @@ shinyServer(function(input, output){
   })
   
   
-  
   #### Map Tab #########################################################
-  ## Filter
   df1 <- reactive({
     if(is.null(input$checkGroup)){
       df1 = data %>% 
         filter(between(year, input$slider[1], input$slider[2])) %>%
-        group_by(country, age) %>%
-        summarise(suicides100 = sum(suicide_per_100k),
+        group_by(country) %>%
+        summarise(suicide_rate = (suicide_per_100k = sum(suicides_no) / sum(population) * 100000),
                   suicides = sum(suicides_no))
     }
     else{
       df1 = data%>%
         filter(age %in% input$checkGroup) %>%
         filter(between(year, input$slider[1], input$slider[2])) %>% 
-        group_by(country, age) %>%
-        summarise(suicides100 = sum(suicide_per_100k),
+        group_by(country) %>%
+        summarise(suicide_rate = (suicide_per_100k = sum(suicides_no) / sum(population) * 100000),
                   suicides = sum(suicides_no))
     }
   })
   
   
   ## Render Map
-  # show map using googleVis
   output$map <-renderGvis({
     gvisGeoChart(data = df1(), locationvar = "country", colorvar = input$type,
                  options = list(region="world", displayMode="auto",
@@ -78,32 +78,31 @@ shinyServer(function(input, output){
   })
   
   output$maxBox <- renderInfoBox({
-    max_value <- max(df1()$suicides100)
-    max_state <- df1()$country[df1()$suicides100 == max_value]
-    infoBox(max_state, max_value, icon = icon("hand-o-up"), color = "light-blue")
+    max_value <- round(max(df1()$suicide_rate), 2)
+    max_state <- df1()$country[df1()$suicide_rate == (max(df1()$suicide_rate))]
+    infoBox("Country with highest suicide rates",max_state, max_value, icon = icon("hand-up", lib = "glyphicon"), color = "light-blue")
   })
   output$avgBox <- renderInfoBox({
-    avg_value <- round(mean(df1()$suicides100), 2)
+    avg_value <- round(mean(df1()$suicide_rate), 2)
     infoBox("Average Global Suicides (/100k)", avg_value, icon = icon("calculator"), color = "light-blue")
   })
   output$minBox <- renderInfoBox({
     min_state <-
-      df1()$country[df1()$suicides100 == 0]
+      df1()$country[df1()$suicide_rate == 0]
     min_state = paste(min_state, collapse = ", ")
     infoBox(min_state, title = "Countries w/ 0 Suicides (/100k): ",
             icon = icon("user-times"), color = "navy")
   })
   
   #### Graphs Tab ######################################################
-  ## Graphs and Histograms
-  # cont, sex, gdp, year
+  ## Graph 1.1 #######################
   df2 <- reactive({
     df2 = data %>% 
       filter(continent == input$cont) %>%
       filter(sex == input$sex) %>%
       filter(between(gdp_per_capita, input$gdp[1], input$gdp[2])) %>%
       filter(between(year, input$year[1], input$year[2])) %>% 
-      arrange(desc(suicides))
+      arrange(desc(suicides_no))
   })
   
   output$line <- renderPlotly(
@@ -140,7 +139,69 @@ shinyServer(function(input, output){
                theme_gdocs() +
                labs(title = "Suicides vs. Population", x = "Population", y = "Suicides"))
   )
-  ############ analysis tab
+  
+  
+  ## Graph 1.2 #######################
+ 
+  overall_tibble <- data %>%
+    select(year, suicides_no, population) %>%
+    group_by(year) %>%
+    summarise(suicide_per_100k = round((sum(suicides_no)/sum(population))*100000, 2)) 
+  
+  output$general <- renderHighchart({
+    highchart() %>% 
+      hc_add_series(overall_tibble, hcaes(x = year, y = suicide_per_100k, color = suicide_per_100k), type = "line") %>%
+      hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br> Suicides: <b>{point.y}</b>")) %>%
+      hc_title(text = "Global Suicides by Year") %>% 
+      hc_subtitle(text = "1985-2016") %>%
+      hc_xAxis(title = list(text = "Year"),
+               min = input$slider[1],
+               max = input$slider[2]) %>%
+      hc_yAxis(title = list(text = "Suicides per 100K population"),
+               allowDecimals = FALSE,
+               plotLines = list(list(
+                 color = "black", width = 1, dashStyle = "Dash", 
+                 value = mean(overall_tibble$suicide_per_100k),
+                 label = list(text = "Mean = 13.12", 
+                              style = list(color = "black"))))) %>%
+      hc_legend(enabled = FALSE) %>% 
+      hc_add_theme(custom_theme)
+  })
+  
+  age_tibble <- data %>%
+    select(year, age, suicides_no, population) %>%
+    group_by(year, age) %>%
+    summarise(suicide_per_100k = round((sum(suicides_no)/sum(population))*100000, 2))
+  
+  output$age <- renderPlotly({
+    
+    plot_ly(age_tibble, y = ~suicide_per_100k, color= ~age, type = 'box', showlegend = FALSE) %>% layout(
+      title = 'Global Suicides Per Age',
+      xaxis = list(title = 'Age Range'),
+      yaxis = list(title = 'Suicide per 100K Population'))                                                                     
+    
+  })
+  
+  pie_sex <- data %>%
+    select(sex, suicides_no, population) %>%
+    group_by(sex) %>%
+    summarise(suicide_per_100k = round((sum(suicides_no)/sum(population))*100000, 2))
+  
+  output$pie <- renderHighchart({
+    highchart() %>% 
+      hc_add_series(pie_sex, hcaes(x = sex, y = suicide_per_100k, color = sex_color), type = "pie") %>%
+      hc_tooltip(borderWidth = 1.5, headerFormat = "", pointFormat = paste("Gender: <b>{point.sex} ({point.percentage:.1f}%)</b> <br> Suicides per 100K: <b>{point.y}</b>")) %>%
+      hc_title(text = "Global suicides by Gender") %>% 
+      hc_subtitle(text = "1985-2015") %>%
+      hc_plotOptions(pie = list(dataLabels = list(distance = 15, 
+                                                  style = list(fontSize = 10)), 
+                                size = 130)) %>% 
+      hc_add_theme(custom_theme)
+  })
+  
+  
+  ## Graph 1.3 #######################
+  
   output$analysis <- renderText({
     analysis_data <- data %>% filter(input$country_for_analysis == country) %>% group_by(year) %>% summarize(suicides = sum(suicides_no)) %>% 
       filter( input$input_range_analysis[1] <= year & input$input_range_analysis[2] >= year ) %>% select(suicides)
@@ -193,34 +254,51 @@ shinyServer(function(input, output){
       need(nrow(test) > 1 , "Please select a country.")
     )
     
-    testing <- ggplot(test, aes(test$year, test$suicides)) + geom_line() + labs(title = "A View of total suicide numbers for each year in the selected Country") +
+    testing <- ggplot(test, aes(year, suicides)) + geom_line() + labs(title = "A View of total suicide numbers for each year in the selected Country") +
       xlab("Year") + ylab("Total number of suicides")
     testing
   })
   
-  # pie chart in analysis page
-  output$pie_analysis <- renderPlotly({
-    test2 <- data %>% filter(input$country_for_analysis == country, input$analysis_for_year == year, input$analysis_for_sex == sex)
-    value <- test2[,5]
+  
+ ## bar chart for age 
+  
+  output$bar_title <- renderText({
+    explanation <- paste0("What is the most vulnerable age group in ", input$analysis_for_year, " in ", input$country_for_analysis, "?")
+  })
+  output$barg <- renderPlot({
     
-    validate( 
-      need(nrow(test2) > 1,  "Please select country. If there is no plot after selecting country, for this specific year, there were no recorded data.")
-    )
-    
-    p <- plot_ly(test2, labels = test2$age , values = value, type = 'pie') %>% layout(title = 'Percentage of Each Age Group in Comparison with Suicide Numbers') 
-    p
+    # the user selects both in the input gender widget then display bar graph with data containing both sexes
+  
+      both_case <- data %>% filter(input$analysis_for_year == year, input$country_for_analysis == country)
+      
+      # Error message that there is no data available (data for graph is empty)
+      validate(
+        need(nrow(both_case) > 1, message = "Data not available / No recorded data available.")
+      )
+      
+      # bar graph with ggplot 
+      output <- ggplot(both_case, aes(both_case$age, both_case$suicides_no, fill = both_case$sex)) + geom_bar(stat="identity", position ="dodge") +
+        scale_fill_brewer(palette = "Set1") + labs(title = " A Look into Suicide numbers for each Age Group for both genders", fill = "Gender") + 
+        xlab("Age Groups") + ylab("Number of Suicides") 
+      output
   })
   
-  # ANALYSIS TITLE 
+  # Text explanation for bar graph 
+  output$bar_explanation <- renderText(
+    explanation <- paste("The graph (if displayed) shows information about suicide numbers in each particular age group in the selected 
+                         year that is chosen. A comparison of this allows us to be able to conclude which age group, in that country in the
+                         particular year contains the highest suicide numbers.")
+  )
+  
+  
   output$analysis_title <- renderText({
     text <- paste("Analysis")
   })
-  # ANALYSIS EXPLANATIONS 
+ 
   output$analysis_introduction <- renderText({
     text <- paste("Given the information from the user-selected COUNTRY and the given range of YEARS, we are able to calculate that : ")
   })
   
-  # ANALYSIS EXPLANATIONS
   output$analysis_gdp_explanation <- renderText({ 
     text <- paste("Given the information of the selected country and the year, the graphs below show the GDP in the specific range of years and
                   the graph of the number of suicides with the same range of years. With the side-by-side graphical visual representation, we can 
@@ -235,23 +313,9 @@ shinyServer(function(input, output){
                   analysis we can observe that there may be some significant relation between the two.")
   })
   
-  # ANALYSIS EXPLANATIONS
-  output$analysis_one_year_input <- renderText({
-    text <- paste("The following analysis enables you to view the percentage of each age group that contributes to the suicide rate given the selected
-                  country. Please select a specific year and gender in the dropdown menus to view the information. ** Data make take a moment to load.")
-  })
-  
-  
-  
   
   #### ML Tab ##########################################################
-  ## reactive function for the kmeans?
-  # Combine the selected variables into a new data frame
   selectedData <- reactive({
-    df3 = df %>%
-      filter(country %in% c("United States", "Canada", "Australia", "Mexico", "South Korea")) %>% 
-      select(-age, -continent, -gdp_for_year, -sex) %>% 
-      select(-generation, -year)
     df3[, c(input$xcol, input$ycol)]
   })
   
@@ -270,12 +334,6 @@ shinyServer(function(input, output){
                scale_fill_manual("Clusters") +
                labs(title = "K Means Clustering", x = as.character(input$xcol), y = as.character(input$ycol))) %>% 
       layout(showlegend = FALSE)
-    
-    # par(mar = c(5.1, 4.1, 0, 1))
-    # plot(selectedData(),
-    #      col = c(clusters()$cluster),
-    #      pch = 20, cex = 1.5)
-    # points(clusters()$centers, pch = 4, cex = 4, lwd = 4)
   })
   
   output$plot2 <- renderPlotly(
@@ -298,7 +356,6 @@ shinyServer(function(input, output){
   )
   
   #### Data Tab #######################################################
-  ## Render Data Table with Filtering Options
   output$table_text <- renderText({
     text <- paste("A Look Into Our Dataset, specified just for your choosings.")
   })
@@ -306,30 +363,14 @@ shinyServer(function(input, output){
   output$table <- renderDataTable({
     # Warning messages for user to see if no values selected
     validate(
-      
       need(input$input_country, message = "Please select country."),
       need(input$input_age, message = "Please select intended age group.")
-      
     ) 
     
-    # table organization
-    if(input$input_gender == "Both") {
-      desired_df <-  data %>%
-        filter(input$input_country == country,input$input_age == age,input$input_year == year) %>% select(country,year,sex,age,suicides_no,population,suicide_per_100k,generation)
-    } 
-    else {
-      desired_df <-  data %>%
-        filter(input$input_country == country,input$input_age == age,input$input_gender == sex,input$input_year == year) %>% select(country,year,sex,age,suicides_no,population,suicide_per_100k,generation)
-    } 
-  })
+   desired_df <-  data %>%
+      filter(input$input_country == country,age %in% input$input_age,input$input_year == year) %>% 
+      select(country,year,sex,age,suicides_no,population,suicide_per_100k,generation)
+    
+  }) 
+})  
   
-  # Project description section in about us page
-  output$help_title <- renderText({
-    title <- paste("Need Help?")
-  })
-  output$help_description <- renderText({
-    project_description <- paste("Help........Call.......")
-  })
-  
-  
-})

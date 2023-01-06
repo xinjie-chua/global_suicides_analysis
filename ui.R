@@ -11,6 +11,7 @@ library(tidyr)
 library(ggplot2)
 library(stringr)
 library(leaflet)
+library(highcharter)
 
 load_pckg <- function(){
   if(!require('pacman'))install.packages('pacman')
@@ -50,8 +51,8 @@ shinyUI(
                   textOutput("introduction1"), 
                   HTML( paste('<br/>')),
                   textOutput("introduction2"), 
-                  HTML('<center><img src="https://vajiramandravi.s3.us-east-1.amazonaws.com/media/2022/11/22/12/22/32/suicideee.jpg" width="600"></center>'),
                   HTML( paste('<br/>')),
+                  HTML('<center><img src="https://vajiramandravi.s3.us-east-1.amazonaws.com/media/2022/11/22/12/22/32/suicideee.jpg" width="600"></center>'),
                   tags$head(tags$style("#introduction_title{ color:#00BFFF; font-size: 20px; text-align: center;}
                                         #introduction1{text-align: justify;font-size: 15px;}
                                         #introduction2{text-align: justify;font-size: 15px;}"))
@@ -60,17 +61,14 @@ shinyUI(
           
           tabItem(tabName = "maps",
                   fluidRow(infoBoxOutput("maxBox"),
-                           infoBoxOutput("avgBox"),
-                           infoBox("Average US Suicides", subtitle = "in 2018 (/100k)", 13.9,
-                                   icon = icon("globe-americas"), fill = TRUE,
-                                   href = "https://www.americashealthrankings.org/explore/annual/measure/Suicide/state/ALL", color = "light-blue")),
+                           infoBoxOutput("avgBox")),
                   fluidRow(
                     column(9, box(htmlOutput("map"), height = "auto", width = "auto")),
                     column(3,
                            radioButtons("type", label = h3("Display map by: "),
-                                        choices = list("Suicides" = "suicides",
-                                                       "Suicides (/100k)" = "suicides100"),
-                                        selected = "suicides"),
+                                        choices = list("Suicides (/100k)" = "suicide_rate",
+                                                       "Suicides" = "suicides"),
+                                        selected = "suicide_rate"),
                            checkboxGroupInput("checkGroup", label = h3("Filter by age group: "),
                                               choices = list("5-14 years", "15-24 years",
                                                              "25-34 years", "35-54 years",
@@ -81,9 +79,6 @@ shinyUI(
                                        max = 2016, value = c(1985, 2016), sep = "")
                            
                     )
-                  ),
-                  fluidRow(
-                    infoBoxOutput("minBox", width = 12)
                   )
           ),
           tabItem(tabName = "graphs",
@@ -113,7 +108,30 @@ shinyUI(
                                       fluidRow(
                                         box(plotlyOutput("scat"), height = 420, width = 12)
                                       )),
+                             
                              tabPanel("Graph 1.2",
+                                     sidebarPanel(
+                                       h4("Worldwide General Overview to suicides in 1985-2016"),
+                                       
+                                       sliderInput("slider", label = h4("Years"), min = 1985, max = 2016,
+                                                   value = c(1985, 2016),
+                                                   sep = ''),
+                                       p("This dashboard is intended to provide some general insight on the delicate matter of suicides all over the world based on 
+                                         a dataset with data that range from 1985 to 2016 for every country accounting for sex, age and economic variables such as GDP per capita .", 
+                                         style = "font-family: 'times'; font-si16pt"),
+                                    
+                                       highchartOutput(outputId = "pie")
+                                     ),
+                                     
+                                    
+                                     mainPanel(
+                                       highchartOutput(outputId = "general"),
+                                       p(' '),
+                                       plotlyOutput(outputId = "age")
+                                     )
+                                  ),
+                            
+                            tabPanel("Graph 1.3",
                                       sidebarLayout(
                                         sidebarPanel(
                                           selectInput("country_for_analysis", "Country", choices = sort(data$country), selected = "Albania"),
@@ -125,15 +143,15 @@ shinyUI(
                                           textOutput("analysis"),
                                           textOutput("analysis_gdp_explanation"),
                                           splitLayout(cellWidths = c("50%","50%"), plotOutput("analysis_gdp"), plotOutput("analysis_suicides")),
-                                          textOutput("analysis_one_year_input"), 
-                                          selectInput("analysis_for_year", "Select One Specific Year", choices = sort(data$year)),
-                                          selectInput("analysis_for_sex", "Select Sex", choices = unique(data$sex)),
-                                          plotlyOutput("pie_analysis"),
-                                          
-                                          tags$head(tags$style("#analysis_title{ color: #00BFFF; font-size: 20px}"))
-                                        )
+                                          textOutput("bar_title"),
+                                          selectInput("analysis_for_year", "Select One Specific Year", choices = as.integer(sort(data$year))),
+                                          plotOutput("barg"),
+                                          textOutput("bar_explanation"),
+                                          tags$head(tags$style("#analysis_title{ color: #00BFFF; font-size: 20px}","#bar_title{color: #00BFFF; font-size: 20px}"))
                                       )
-                  ))),
+                                )),
+                          )),
+          
           tabItem(tabName = "ml",
                   fluidRow(
                     column(9,
@@ -143,11 +161,11 @@ shinyUI(
                     ),
                     column(3,
                            selectInput('xcol', 'X Variable',
-                                       choices = list("suicides", "population",
-                                                      "suicides.per.100k", "gdp.capita")),
+                                       choices = list("suicides_no", "population",
+                                                      "suicide_per_100k", "gdp_per_capita")),
                            selectInput('ycol', 'Y Variable',
-                                       choices = list("suicides", "population",
-                                                      "suicides.per.100k", "gdp.capita"),
+                                       choices = list("suicides_no", "population",
+                                                      "suicide_per_100k", "gdp_per_capita"),
                                        selected = "population"),
                            numericInput('clusters', 'Cluster count', 5,
                                         min = 1, max = 9))
@@ -158,19 +176,19 @@ shinyUI(
                     sidebarPanel(
                       sliderInput("input_year", "Year", value = 1985, min = 1985, max = 2016, sep=""),
                       selectInput("input_country","Country", choices = sort(data$country)),
-                      radioButtons("input_gender","Sex", choices = c("Male" , "Female", "Both")),
-                      selectInput("input_age","Age Group", choices = sort(data$age))
-                    ), mainPanel(
+                      checkboxGroupInput("input_age","Age Group",choices = list("5-14 years", "15-24 years",
+                                                                    "25-34 years", "35-54 years",
+                                                                    "55-74 years", "75+ years"),
+                                         selected = c("5-14 years", "15-24 years", "25-34 years",
+                                                      "35-54 years", "55-74 years","75+ years"))
+                      ), mainPanel(
                       textOutput("table_text"),
                       dataTableOutput("table"),
                       tags$head(tags$style("#table_text{color:#00BFFF; font-size:20px}"))
                     ))
           ),
-        tabItem(tabName = "help",
-                textOutput("help_title"),
-                textOutput("help_description"), 
-                tags$head(tags$style("#help_title{ color:#00BFFF; font-size: 20px; text-align: center;}
-                                          #help{text-align: justify;font-size: 15px;}"))
+        tabItem(tabName = "help", 
+                includeMarkdown("help.Rmd")
                 )
         )
       )
