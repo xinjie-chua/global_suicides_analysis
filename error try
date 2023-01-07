@@ -1,0 +1,30 @@
+import java.io.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class extractError {
+    public static void main(String[] args) {
+        try {
+            File file = new File("extracted_log");
+            BufferedReader read = new BufferedReader(new FileReader(file));
+            PrintWriter os = new PrintWriter(new FileOutputStream("errorFile"));
+            Pattern pattern = Pattern.compile("error");
+
+            String line;
+            while ((line = read.readLine()) != null) {
+
+                Matcher match = pattern.matcher(line);
+
+                while (match.find()) {
+                    os.println(line);
+                    System.out.println(line);
+                }
+            }
+            os.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
